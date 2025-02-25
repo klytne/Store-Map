@@ -37,6 +37,25 @@ class _MyAppState extends State<MyApp> {
     return stores;
   }
 
+  // calculates the average latitude and longitude of the stores
+  // and then sets initial camera position
+  Future<CameraPosition> _calculateInitialPosition(List<Store> stores) async {
+    double totalLat = 0, totalLng = 0;
+    for (var store in stores) {
+      totalLat += store.latitude;
+      totalLng += store.longitude;
+    }
+    final count = stores.length;
+    final centerLat = totalLat / count;
+    final centerLng = totalLng / count;
+
+    return CameraPosition(
+      target: LatLng(centerLat, centerLng),
+      zoom: 10, // Adjusts zoom level as needed
+    );
+  }
+
+
   Future<void> _onMapCreated(GoogleMapController controller) async {
     final stores = await loadStores();
 
@@ -53,6 +72,10 @@ class _MyAppState extends State<MyApp> {
         _markers[store.name] = marker;
       }
     });
+
+    // Computes the center position and animate camera
+    final initialPosition = await _calculateInitialPosition(stores);
+    controller.animateCamera(CameraUpdate.newCameraPosition(initialPosition));
   }
 
   @override
