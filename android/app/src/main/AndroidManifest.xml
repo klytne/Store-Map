@@ -3,6 +3,11 @@
         android:label="storemap"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <!-- Google Maps API key -->
+        <meta-data android:name="com.google.android.geo.API_KEY"
+               android:value="AIzaSyCd5u_-oxxOXq1moqCSN06bzY44JSbRc_g"/>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
