@@ -4,7 +4,6 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:csv/csv.dart';
 import 'src/store.dart';
 import 'src/path_point.dart';
-import 'src/load_path_points.dart';
 import 'package:intl/intl.dart';
 
 void main() {
@@ -24,9 +23,6 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final Map<String, Marker> _markers = {};
-  late GoogleMapController _mapController;
-  final Set<Polyline> _polylines = {};
-  // final Set<Marker> _markers = {};
   List<PathPoint> _pathPoints = [];
 
   // Loading & Displaying Store Locations
@@ -87,53 +83,6 @@ class _MyAppState extends State<MyApp> {
     // Move the camera to focus on store locations
     final initialPosition = await _calculateInitialPosition(stores);
     controller.animateCamera(CameraUpdate.newCameraPosition(initialPosition));
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAndDisplayPath();
-  }
-
-  //  Loading and Displaying Path Data
-  Future<void> _loadAndDisplayPath() async {
-    final points = await loadPathPoints();
-    setState(() {
-      _pathPoints = points;
-
-      // Create polyline from all points
-      _polylines.add(
-        Polyline(
-          polylineId: const PolylineId('path'),
-          points: points.map((p) => LatLng(p.latitude, p.longitude)).toList(),
-          color: Colors.blue,
-          width: 5,
-        ),
-      );
-
-      // Add markers at each point with details
-      for (final point in points) {
-        _markers['${point.latitude}-${point.longitude}'] = Marker(
-          markerId: MarkerId('${point.latitude}-${point.longitude}'),
-          position: LatLng(point.latitude, point.longitude),
-          infoWindow: InfoWindow(
-            title: formatDateTime(point.dateTime),
-            snippet: 'Speed: ${point.speed} km/h, Heading: ${point.heading}°',
-          ),
-        );
-      }
-    });
-
-    // Adjust camera to first point
-    if (points.isNotEmpty) {
-      final firstPoint = points.first;
-      _mapController.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          LatLng(firstPoint.latitude, firstPoint.longitude),
-          14,
-        ),
-      );
-    }
   }
 
   @override
