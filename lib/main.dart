@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter/services.dart' show rootBundle;
+// import 'dart:convert';
+import 'package:csv/csv.dart';
+import 'src/store.dart';
 
 void main() {
   runApp(const MyApp());
@@ -13,32 +17,58 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  late GoogleMapController mapController;
+  final Map<String, Marker> _markers = {};
 
-  final LatLng _center = const LatLng(45.521563, -122.677433);
+  Future<List<Store>> loadStores() async {
+    final rawCsv = await rootBundle.loadString('assets/storesCopy.csv');
+    List<List<dynamic>> csvTable = const CsvToListConverter(
+      fieldDelimiter: ';', // Use semicolon as delimiter
+    ).convert(rawCsv);
 
-  void _onMapCreated(GoogleMapController controller) {
-    mapController = controller;
+    // If there's whitespace around your data, you might want to trim it.
+  List<Store> stores = csvTable.skip(1).map((row) {
+    return Store(
+      name: row[0].toString().trim(),
+      latitude: double.parse(row[1].toString().trim()),
+      longitude: double.parse(row[2].toString().trim()),
+    );
+  }).toList();
+
+    return stores;
+  }
+
+  Future<void> _onMapCreated(GoogleMapController controller) async {
+    final stores = await loadStores();
+
+    setState(() {
+      _markers.clear();
+      for (final store in stores) {
+        final marker = Marker(
+          markerId: MarkerId(store.name),
+          position: LatLng(store.latitude, store.longitude),
+          infoWindow: InfoWindow(
+            title: store.name,
+          ),
+        );
+        _markers[store.name] = marker;
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.green[700],
-      ),
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('Maps Sample App'),
-          elevation: 2,
+          title: const Text('Store Locations'),
         ),
         body: GoogleMap(
           onMapCreated: _onMapCreated,
-          initialCameraPosition: CameraPosition(
-            target: _center,
-            zoom: 11.0,
+          initialCameraPosition: const CameraPosition(
+            target: LatLng(0, 0),
+            zoom: 2,
           ),
+          markers: _markers.values.toSet(),
         ),
       ),
     );
