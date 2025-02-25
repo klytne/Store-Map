@@ -24,6 +24,10 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final Map<String, Marker> _markers = {};
+  late GoogleMapController _mapController;
+  final Set<Polyline> _polylines = {};
+  // final Set<Marker> _markers = {};
+  List<PathPoint> _pathPoints = [];
 
   // Loading & Displaying Store Locations
   Future<List<Store>> loadStores() async {
@@ -86,38 +90,6 @@ class _MyAppState extends State<MyApp> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        appBar: AppBar(title: const Text('Store Locations')),
-        body: GoogleMap(
-          onMapCreated: _onMapCreated,
-          initialCameraPosition: const CameraPosition(
-            target: LatLng(0, 0),
-            zoom: 2,
-          ),
-          markers: _markers.values.toSet(),
-        ),
-      ),
-    );
-  }
-}
-
-class MapScreen extends StatefulWidget {
-  const MapScreen({Key? key}) : super(key: key);
-
-  @override
-  _MapScreenState createState() => _MapScreenState();
-}
-
-class _MapScreenState extends State<MapScreen> {
-  late GoogleMapController _mapController;
-  final Set<Polyline> _polylines = {};
-  final Set<Marker> _markers = {};
-  List<PathPoint> _pathPoints = [];
-
-  @override
   void initState() {
     super.initState();
     _loadAndDisplayPath();
@@ -141,14 +113,12 @@ class _MapScreenState extends State<MapScreen> {
 
       // Add markers at each point with details
       for (final point in points) {
-        _markers.add(
-          Marker(
-            markerId: MarkerId('${point.latitude}-${point.longitude}'),
-            position: LatLng(point.latitude, point.longitude),
-            infoWindow: InfoWindow(
-              title: formatDateTime(point.dateTime),
-              snippet: 'Speed: ${point.speed} km/h, Heading: ${point.heading}°',
-            ),
+        _markers['${point.latitude}-${point.longitude}'] = Marker(
+          markerId: MarkerId('${point.latitude}-${point.longitude}'),
+          position: LatLng(point.latitude, point.longitude),
+          infoWindow: InfoWindow(
+            title: formatDateTime(point.dateTime),
+            snippet: 'Speed: ${point.speed} km/h, Heading: ${point.heading}°',
           ),
         );
       }
@@ -168,18 +138,18 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Path Display")),
-      body: GoogleMap(
-        onMapCreated: (controller) {
-          _mapController = controller;
-        },
-        initialCameraPosition: const CameraPosition(
-          target: LatLng(0, 0),
-          zoom: 2,
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Store Locations')),
+        body: GoogleMap(
+          onMapCreated: _onMapCreated,
+          initialCameraPosition: const CameraPosition(
+            target: LatLng(0, 0),
+            zoom: 2,
+          ),
+          markers: _markers.values.toSet(),
         ),
-        polylines: _polylines,
-        markers: _markers,
       ),
     );
   }
