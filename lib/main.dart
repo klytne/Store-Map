@@ -27,7 +27,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final Map<String, Marker> _markers = {};
-  final Set<Polyline> _polylines = {}; // Store the vehicle path
+  final Set<Polyline> _polylines = {};
   List<PathPoint> _pathPoints = [];
   GoogleMapController? _mapController;
   BitmapDescriptor? pinLocationIcon;
@@ -43,10 +43,10 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     _setCustomMapPin().then(
       (_) => _loadPathAndStores(),
-    ); // Ensure icon is loaded first
+    ); // Icon is loaded first
   }
 
-  // Load the custom store icon
+  // Load custom store icon
   Future<void> _setCustomMapPin() async {
     pinLocationIcon = await BitmapDescriptor.fromAssetImage(
       const ImageConfiguration(devicePixelRatio: 1.0),
@@ -58,10 +58,10 @@ class _MyAppState extends State<MyApp> {
   Future<List<Store>> loadStores() async {
     final rawCsv = await rootBundle.loadString('assets/storesCopy.csv');
     List<List<dynamic>> csvTable = const CsvToListConverter(
-      fieldDelimiter: ';', // Use semicolon as delimiter
+      fieldDelimiter: ';', // Semicolon as delimiter
     ).convert(rawCsv);
 
-    // Skip the first row
+    // Skip first row
     List<Store> stores =
         csvTable.skip(1).map((row) {
           // convert to a Store object
@@ -127,7 +127,7 @@ class _MyAppState extends State<MyApp> {
         );
       }
 
-      // Find the closest store to the path
+      // Find closest store to the path
       for (final store in stores) {
         for (final point in pathPoints) {
           double distance = Geolocator.distanceBetween(
@@ -143,10 +143,10 @@ class _MyAppState extends State<MyApp> {
         }
       }
 
-      // Find the highest speed recorded
+      // Find highest speed recorded
       maxSpeed = pathPoints.map((p) => p.speed).reduce((a, b) => a > b ? a : b);
 
-      // Find when the vehicle first came close to the closest store
+      // 🔍 Find when the vehicle first came close to the closest store
       if (closestStore != null) {
         for (final point in pathPoints) {
           double distance = Geolocator.distanceBetween(
@@ -155,11 +155,9 @@ class _MyAppState extends State<MyApp> {
             point.latitude,
             point.longitude,
           );
-          if (distance <= 50) {
-            // 50 meters threshold
-            firstCloseTime ??= point.dateTime;
-            break;
-          }
+
+          // Timestamp when vechicle the vehicle first came close to the closest store
+          firstCloseTime ??= point.dateTime;
         }
       }
 
@@ -178,11 +176,30 @@ class _MyAppState extends State<MyApp> {
       }
     });
 
-    // Set the initial camera position
+    // Loop through each point in the path and calculate the total distance traveled
+    // by summing the distance between consecutive GPS coordinates.
+    for (int i = 1; i < pathPoints.length; i++) {
+      totalDistance += Geolocator.distanceBetween(
+        pathPoints[i - 1].latitude,
+        pathPoints[i - 1].longitude,
+        pathPoints[i].latitude,
+        pathPoints[i].longitude,
+      );
+    }
+
+    // Set initial camera position
     final initialPosition = await _calculateInitialPosition(stores);
     _mapController?.animateCamera(
       CameraUpdate.newCameraPosition(initialPosition),
     );
+    
+
+    // Update state for the info card
+    closestStoreName = closestStore?.name ?? "Unknown";
+    firstCloseTimestamp =
+        firstCloseTime != null
+            ? DateFormat('yyyy-MM-dd HH:mm').format(firstCloseTime!)
+            : "N/A";
   }
 
   @override
@@ -209,8 +226,8 @@ class _MyAppState extends State<MyApp> {
             Positioned(
               top: 30,
               left: 20,
-              width: 300,
-              height: 120,
+              width: 320,
+              height: 130,
               child: Card(
                 elevation: 5,
                 shape: RoundedRectangleBorder(
@@ -224,8 +241,7 @@ class _MyAppState extends State<MyApp> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        "🚗 Closest Store: $closestStoreName",
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        "🚗 Closest Store: ${closestStoreName}",
                       ),
                       Text(
                         "⚡ Highest Speed: ${maxSpeed.toStringAsFixed(2)} km/h",
@@ -233,7 +249,7 @@ class _MyAppState extends State<MyApp> {
                       Text(
                         "📏 Distance Traveled: ${totalDistance.toStringAsFixed(2)} meters",
                       ),
-                      Text("⏳ First Close Timestamp: $firstCloseTimestamp"),
+                      Text("⏳ First Close Timestamp: ${firstCloseTimestamp}"),
                     ],
                   ),
                 ),
