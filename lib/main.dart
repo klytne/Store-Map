@@ -1,185 +1,127 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:csv/csv.dart';
-import 'src/store.dart';
-import 'src/path_point.dart';
-import 'src/load_path_points.dart';
-import 'package:intl/intl.dart';
+import 'dart:async';
+import 'package:flutter/services.dart'; // Added this for asset loading
 
-void main() {
-  runApp(const MyApp());
-}
+void main() => runApp(MaterialApp(home: VehicleMap()));
 
-String formatDateTime(DateTime dt) {
-  return DateFormat('yyyy-MM-dd – kk:mm').format(dt);
-}
-
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+class VehicleMap extends StatefulWidget {
+  const VehicleMap({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  VehicleMapState createState() => VehicleMapState();
 }
 
-class _MyAppState extends State<MyApp> {
-  final Map<String, Marker> _markers = {};
-
-  // Loading & Displaying Store Locations
-  Future<List<Store>> loadStores() async {
-    final rawCsv = await rootBundle.loadString('assets/storesCopy.csv');
-    List<List<dynamic>> csvTable = const CsvToListConverter(
-      fieldDelimiter: ';', // Use semicolon as delimiter
-    ).convert(rawCsv);
-
-    // Skip the first row
-    List<Store> stores =
-        csvTable.skip(1).map((row) {
-          // convert to a Store object
-          return Store(
-            name: row[0].toString().trim(),
-            latitude: double.parse(row[1].toString().trim()),
-            longitude: double.parse(row[2].toString().trim()),
-          );
-        }).toList();
-
-    return stores;
-  }
-
-  // Calculates the average latitude and longitude of the stores
-  // and then sets initial camera position
-  Future<CameraPosition> _calculateInitialPosition(List<Store> stores) async {
-    double totalLat = 0, totalLng = 0;
-    for (var store in stores) {
-      totalLat += store.latitude;
-      totalLng += store.longitude;
-    }
-    final count = stores.length;
-    final centerLat = totalLat / count;
-    final centerLng = totalLng / count;
-
-    return CameraPosition(
-      target: LatLng(centerLat, centerLng),
-      zoom: 10, // Adjust zoom level as need
-    );
-  }
-
-  // Displaying Markers on the Map
-  Future<void> _onMapCreated(GoogleMapController controller) async {
-    final stores = await loadStores();
-
-    setState(() {
-      _markers.clear();
-      for (final store in stores) {
-        final marker = Marker(
-          markerId: MarkerId(store.name),
-          position: LatLng(store.latitude, store.longitude),
-          infoWindow: InfoWindow(title: store.name),
-        );
-        _markers[store.name] = marker;
-      }
-    });
-
-    // Move the camera to focus on store locations
-    final initialPosition = await _calculateInitialPosition(stores);
-    controller.animateCamera(CameraUpdate.newCameraPosition(initialPosition));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        appBar: AppBar(title: const Text('Store Locations')),
-        body: GoogleMap(
-          onMapCreated: _onMapCreated,
-          initialCameraPosition: const CameraPosition(
-            target: LatLng(0, 0),
-            zoom: 2,
-          ),
-          markers: _markers.values.toSet(),
-        ),
-      ),
-    );
-  }
-}
-
-class MapScreen extends StatefulWidget {
-  const MapScreen({Key? key}) : super(key: key);
-
-  @override
-  _MapScreenState createState() => _MapScreenState();
-}
-
-class _MapScreenState extends State<MapScreen> {
-  late GoogleMapController _mapController;
-  final Set<Polyline> _polylines = {};
+class VehicleMapState extends State<VehicleMap> {
+  GoogleMapController? mapController;
   final Set<Marker> _markers = {};
-  List<PathPoint> _pathPoints = [];
+  final Set<Polyline> _polylines = {};
+
+  List<LatLng> routeCoordinates = [];
+  List<LatLng> pathPoints = [];
+  List<Marker> storeMarkers = [];
+
+  LatLng vehiclePosition = LatLng(37.7749, -122.4194);
 
   @override
   void initState() {
     super.initState();
-    _loadAndDisplayPath();
+    _loadMapData();
+    Timer.periodic(Duration(seconds: 1), (timer) {
+      _moveVehicle();
+    });
   }
 
-  //  Loading and Displaying Path Data
-  Future<void> _loadAndDisplayPath() async {
-    final points = await loadPathPoints();
+  // Load path and store data
+  Future<void> _loadMapData() async {
+    try {
+      final pathData = await _loadPathData();
+      final storeData = await _loadStoreData();
+
+      if (pathData.isNotEmpty) {
+        setState(() {
+          pathPoints = pathData.map((p) => LatLng(p['latitude'], p['longitude'])).toList();
+          storeMarkers = storeData.map((store) => Marker(
+            markerId: MarkerId(store['name']),
+            position: LatLng(store['lat'], store['lng']),
+            infoWindow: InfoWindow(title: store['name']),
+          )).toList();
+          routeCoordinates = pathPoints; // Update route with the new path data
+        });
+
+        _addPolyline();  // Call this after loading data
+      }
+    // ignore: empty_catches
+    } catch (e) {
+    }
+  }
+
+  // Load the PathTravelled.json file from assets
+  Future<List<Map<String, dynamic>>> _loadPathData() async {
+    final String response = await rootBundle.loadString('assets/PathTravelled.json');
+    return List<Map<String, dynamic>>.from(json.decode(response));
+  }
+
+  // Load the storesCopy.csv file from assets
+  Future<List<Map<String, dynamic>>> _loadStoreData() async {
+    final String response = await rootBundle.loadString('assets/storesCopy.csv');
+    return response
+        .split('\n')
+        .skip(1)
+        .map((line) {
+          final parts = line.split(',');
+          return {'name': parts[0], 'lat': double.parse(parts[1]), 'lng': double.parse(parts[2])};
+        })
+        .toList();
+  }
+
+  // Add a polyline to the map
+  void _addPolyline() {
+    final Polyline polyline = Polyline(
+      polylineId: PolylineId('vehicle_route'),
+      points: routeCoordinates,
+      color: Colors.blue,
+      width: 5,
+    );
+
     setState(() {
-      _pathPoints = points;
+      _polylines.add(polyline);
+    });
+  }
 
-      // Create polyline from all points
-      _polylines.add(
-        Polyline(
-          polylineId: const PolylineId('path'),
-          points: points.map((p) => LatLng(p.latitude, p.longitude)).toList(),
-          color: Colors.blue,
-          width: 5,
-        ),
-      );
-
-      // Add markers at each point with details
-      for (final point in points) {
+  // Move vehicle along the route
+  void _moveVehicle() {
+    setState(() {
+      if (routeCoordinates.isNotEmpty) {
+        vehiclePosition = routeCoordinates.removeAt(0);
         _markers.add(
           Marker(
-            markerId: MarkerId('${point.latitude}-${point.longitude}'),
-            position: LatLng(point.latitude, point.longitude),
-            infoWindow: InfoWindow(
-              title: formatDateTime(point.dateTime),
-              snippet: 'Speed: ${point.speed} km/h, Heading: ${point.heading}°',
-            ),
+            markerId: MarkerId('vehicle'),
+            position: vehiclePosition,
+            icon: BitmapDescriptor.defaultMarker,
           ),
         );
       }
     });
-
-    // Adjust camera to first point
-    if (points.isNotEmpty) {
-      final firstPoint = points.first;
-      _mapController.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          LatLng(firstPoint.latitude, firstPoint.longitude),
-          14,
-        ),
-      );
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Path Display")),
+      appBar: AppBar(
+        title: Text('Vehicle Path Visualizer'),
+      ),
       body: GoogleMap(
-        onMapCreated: (controller) {
-          _mapController = controller;
+        onMapCreated: (GoogleMapController controller) {
+          mapController = controller;
         },
-        initialCameraPosition: const CameraPosition(
-          target: LatLng(0, 0),
-          zoom: 2,
+        initialCameraPosition: CameraPosition(
+          target: routeCoordinates.isNotEmpty ? routeCoordinates[0] : LatLng(37.7749, -122.4194),
+          zoom: 13,
         ),
+        markers: Set<Marker>.of(storeMarkers),
         polylines: _polylines,
-        markers: _markers,
       ),
     );
   }
