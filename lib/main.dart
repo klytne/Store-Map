@@ -8,7 +8,7 @@ import 'src/path_point.dart';
 import 'src/load_path_points.dart';
 import 'package:intl/intl.dart';
 import 'package:collection/collection.dart';
-
+import 'package:geolocator/geolocator.dart';
 
 void main() {
   runApp(const MyApp());
@@ -32,10 +32,18 @@ class _MyAppState extends State<MyApp> {
   GoogleMapController? _mapController;
   BitmapDescriptor? pinLocationIcon;
 
+  // Variables for the info card
+  String closestStoreName = "Loading...";
+  double maxSpeed = 0.0;
+  double totalDistance = 0.0;
+  String firstCloseTimestamp = "N/A";
+
   @override
   void initState() {
     super.initState();
-    _setCustomMapPin().then((_) => _loadPathAndStores()); // Ensure icon is loaded first
+    _setCustomMapPin().then(
+      (_) => _loadPathAndStores(),
+    ); // Ensure icon is loaded first
   }
 
   // Load the custom store icon
@@ -90,6 +98,10 @@ class _MyAppState extends State<MyApp> {
     final stores = await loadStores();
     final pathPoints = await loadPathPoints();
 
+    double minDistance = double.infinity;
+    Store? closestStore;
+    DateTime? firstCloseTime;
+
     setState(() {
       _pathPoints = pathPoints;
 
@@ -111,8 +123,44 @@ class _MyAppState extends State<MyApp> {
           markerId: MarkerId(store.name),
           position: LatLng(store.latitude, store.longitude),
           infoWindow: InfoWindow(title: store.name),
-           icon: pinLocationIcon ?? BitmapDescriptor.defaultMarker,
+          icon: pinLocationIcon ?? BitmapDescriptor.defaultMarker,
         );
+      }
+
+      // Find the closest store to the path
+      for (final store in stores) {
+        for (final point in pathPoints) {
+          double distance = Geolocator.distanceBetween(
+            store.latitude,
+            store.longitude,
+            point.latitude,
+            point.longitude,
+          );
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestStore = store;
+          }
+        }
+      }
+
+      // Find the highest speed recorded
+      maxSpeed = pathPoints.map((p) => p.speed).reduce((a, b) => a > b ? a : b);
+
+      // Find when the vehicle first came close to the closest store
+      if (closestStore != null) {
+        for (final point in pathPoints) {
+          double distance = Geolocator.distanceBetween(
+            closestStore!.latitude,
+            closestStore!.longitude,
+            point.latitude,
+            point.longitude,
+          );
+          if (distance <= 50) {
+            // 50 meters threshold
+            firstCloseTime ??= point.dateTime;
+            break;
+          }
+        }
       }
 
       // Load vehicle path markers
@@ -132,7 +180,9 @@ class _MyAppState extends State<MyApp> {
 
     // Set the initial camera position
     final initialPosition = await _calculateInitialPosition(stores);
-    _mapController?.animateCamera(CameraUpdate.newCameraPosition(initialPosition));
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(initialPosition),
+    );
   }
 
   @override
@@ -140,18 +190,56 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
-        appBar: AppBar(title: const Text('Vehicle Path')),
-        body: GoogleMap(
-          onMapCreated: (controller) {
-            _mapController = controller;
-          },
-          initialCameraPosition: const CameraPosition(
-            target: LatLng(0, 0),
-            bearing: 30,
-            zoom: 2,
-          ),
-          markers: _markers.values.toSet(),
-          polylines: _polylines,
+        appBar: AppBar(title: const Text('Stores & Vehicle Path')),
+        body: Stack(
+          children: [
+            GoogleMap(
+              onMapCreated: (controller) {
+                _mapController = controller;
+              },
+              initialCameraPosition: const CameraPosition(
+                target: LatLng(0, 0),
+                zoom: 2,
+              ),
+              markers: _markers.values.toSet(),
+              polylines: _polylines,
+            ),
+
+            // Floating Information Card
+            Positioned(
+              top: 30,
+              left: 20,
+              width: 300,
+              height: 120,
+              child: Card(
+                elevation: 5,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                color: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "🚗 Closest Store: $closestStoreName",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        "⚡ Highest Speed: ${maxSpeed.toStringAsFixed(2)} km/h",
+                      ),
+                      Text(
+                        "📏 Distance Traveled: ${totalDistance.toStringAsFixed(2)} meters",
+                      ),
+                      Text("⏳ First Close Timestamp: $firstCloseTimestamp"),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
