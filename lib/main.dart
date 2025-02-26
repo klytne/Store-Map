@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -6,7 +7,8 @@ import 'src/store.dart';
 import 'src/path_point.dart';
 import 'src/load_path_points.dart';
 import 'package:intl/intl.dart';
-// import 'dart:convert';
+import 'package:collection/collection.dart';
+
 
 void main() {
   runApp(const MyApp());
@@ -25,11 +27,26 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final Map<String, Marker> _markers = {};
+  final Set<Polyline> _polylines = {}; // Store the vehicle path
   List<PathPoint> _pathPoints = [];
   GoogleMapController? _mapController;
+  BitmapDescriptor? pinLocationIcon;
 
+  @override
+  void initState() {
+    super.initState();
+    _setCustomMapPin().then((_) => _loadPathAndStores()); // Ensure icon is loaded first
+  }
 
-  // Loading & Displaying Store Locations
+  // Load the custom store icon
+  Future<void> _setCustomMapPin() async {
+    pinLocationIcon = await BitmapDescriptor.fromAssetImage(
+      const ImageConfiguration(devicePixelRatio: 1.0),
+      'assets/store.png',
+    );
+  }
+
+  // Loading store locations
   Future<List<Store>> loadStores() async {
     final rawCsv = await rootBundle.loadString('assets/storesCopy.csv');
     List<List<dynamic>> csvTable = const CsvToListConverter(
@@ -68,41 +85,73 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
-  // Displaying Markers on the Map
-  Future<void> _onMapCreated(GoogleMapController controller) async {
+  // Load path data and display store locations
+  Future<void> _loadPathAndStores() async {
     final stores = await loadStores();
-    _mapController = controller;
+    final pathPoints = await loadPathPoints();
 
     setState(() {
+      _pathPoints = pathPoints;
+
+      // Add path as a polyline
+      _polylines.add(
+        Polyline(
+          polylineId: const PolylineId('vehicle_path'),
+          points:
+              pathPoints.map((p) => LatLng(p.latitude, p.longitude)).toList(),
+          color: Colors.blue,
+          width: 5,
+        ),
+      );
+
+      // Add markers at stores
       _markers.clear();
       for (final store in stores) {
-        final marker = Marker(
+        _markers[store.name] = Marker(
           markerId: MarkerId(store.name),
           position: LatLng(store.latitude, store.longitude),
           infoWindow: InfoWindow(title: store.name),
+           icon: pinLocationIcon ?? BitmapDescriptor.defaultMarker,
         );
-        _markers[store.name] = marker;
+      }
+
+      // Load vehicle path markers
+      for (final point in pathPoints.whereIndexed(
+        (index, p) => index % 10 == 0,
+      )) {
+        _markers['${point.latitude}-${point.longitude}'] = Marker(
+          markerId: MarkerId('${point.latitude}-${point.longitude}'),
+          position: LatLng(point.latitude, point.longitude),
+          infoWindow: InfoWindow(
+            title: formatDateTime(point.dateTime),
+            snippet: 'Speed: ${point.speed} km/h, Heading: ${point.heading}°',
+          ),
+        );
       }
     });
 
-    // Move the camera to focus on store locations
+    // Set the initial camera position
     final initialPosition = await _calculateInitialPosition(stores);
-    controller.animateCamera(CameraUpdate.newCameraPosition(initialPosition));
+    _mapController?.animateCamera(CameraUpdate.newCameraPosition(initialPosition));
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
-        appBar: AppBar(title: const Text('Store Locations')),
+        appBar: AppBar(title: const Text('Vehicle Path')),
         body: GoogleMap(
-          onMapCreated: _onMapCreated,
+          onMapCreated: (controller) {
+            _mapController = controller;
+          },
           initialCameraPosition: const CameraPosition(
             target: LatLng(0, 0),
+            bearing: 30,
             zoom: 2,
           ),
           markers: _markers.values.toSet(),
+          polylines: _polylines,
         ),
       ),
     );
