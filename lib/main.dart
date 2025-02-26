@@ -4,7 +4,9 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:csv/csv.dart';
 import 'src/store.dart';
 import 'src/path_point.dart';
+import 'src/load_path_points.dart';
 import 'package:intl/intl.dart';
+// import 'dart:convert';
 
 void main() {
   runApp(const MyApp());
@@ -24,6 +26,8 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   final Map<String, Marker> _markers = {};
   List<PathPoint> _pathPoints = [];
+  GoogleMapController? _mapController;
+
 
   // Loading & Displaying Store Locations
   Future<List<Store>> loadStores() async {
@@ -67,6 +71,7 @@ class _MyAppState extends State<MyApp> {
   // Displaying Markers on the Map
   Future<void> _onMapCreated(GoogleMapController controller) async {
     final stores = await loadStores();
+    _mapController = controller;
 
     setState(() {
       _markers.clear();
@@ -83,6 +88,48 @@ class _MyAppState extends State<MyApp> {
     // Move the camera to focus on store locations
     final initialPosition = await _calculateInitialPosition(stores);
     controller.animateCamera(CameraUpdate.newCameraPosition(initialPosition));
+  }
+
+  Future<void> _loadAndDisplayPath() async {
+    final points = await loadPathPoints();
+
+
+    setState(() {
+      _pathPoints = points;
+      // Create polyline from all points
+      _polylines.add(Polyline(
+        polylineId: const PolylineId('path'),
+        points: points
+            .map((p) => LatLng(p.latitude, p.longitude))
+            .toList(),
+        color: Colors.blue,
+        width: 5,
+      ));
+
+      // For interaction, add a marker for each point (or a subset)
+      for (final point in points) {
+        _markers['${point.latitude}-${point.longitude}'] = Marker(
+          markerId: MarkerId('${point.latitude}-${point.longitude}'),
+          position: LatLng(point.latitude, point.longitude),
+          infoWindow: InfoWindow(
+            // title: point.dateTime.toString(), // format as needed
+            snippet: 'Speed: ${point.speed}, Heading: ${point.heading}',
+          ),
+          // Optionally, you can set onTap to do more if needed.
+        );
+      }
+    });
+
+    // Optionally, adjust the camera to fit the polyline
+    if (points.isNotEmpty) {
+      final firstPoint = points.first;
+      _mapController.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          LatLng(firstPoint.latitude, firstPoint.longitude),
+          14, // adjust zoom as needed
+        ),
+      );
+    }
   }
 
   @override
