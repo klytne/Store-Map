@@ -89,49 +89,7 @@ class _MyAppState extends State<MyApp> {
     final initialPosition = await _calculateInitialPosition(stores);
     controller.animateCamera(CameraUpdate.newCameraPosition(initialPosition));
   }
-
-  Future<void> _loadAndDisplayPath() async {
-    final points = await loadPathPoints();
-
-
-    setState(() {
-      _pathPoints = points;
-      // Create polyline from all points
-      _polylines.add(Polyline(
-        polylineId: const PolylineId('path'),
-        points: points
-            .map((p) => LatLng(p.latitude, p.longitude))
-            .toList(),
-        color: Colors.blue,
-        width: 5,
-      ));
-
-      // For interaction, add a marker for each point (or a subset)
-      for (final point in points) {
-        _markers['${point.latitude}-${point.longitude}'] = Marker(
-          markerId: MarkerId('${point.latitude}-${point.longitude}'),
-          position: LatLng(point.latitude, point.longitude),
-          infoWindow: InfoWindow(
-            // title: point.dateTime.toString(), // format as needed
-            snippet: 'Speed: ${point.speed}, Heading: ${point.heading}',
-          ),
-          // Optionally, you can set onTap to do more if needed.
-        );
-      }
-    });
-
-    // Optionally, adjust the camera to fit the polyline
-    if (points.isNotEmpty) {
-      final firstPoint = points.first;
-      _mapController.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          LatLng(firstPoint.latitude, firstPoint.longitude),
-          14, // adjust zoom as needed
-        ),
-      );
-    }
-  }
-
+  
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
