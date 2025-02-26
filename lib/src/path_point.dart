@@ -14,9 +14,8 @@ class PathPoint {
   });
 
   factory PathPoint.fromJson(Map<String, dynamic> json) {
-    final timeStamp = json['timeStamp'] as int;
     return PathPoint(
-      dateTime: DateTime.fromMillisecondsSinceEpoch(timeStamp * 1000),
+      dateTime: DateTime.fromMillisecondsSinceEpoch((json['timeStamp'] as int) * 1000),
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
       heading: json['heading'] as int,
