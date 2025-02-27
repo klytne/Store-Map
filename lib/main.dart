@@ -35,11 +35,11 @@ class _MyAppState extends State<MyApp> {
   List<PathPoint> _pathPoints = []; // List of path points for the vehicle's movement
   List<Store> stores = []; // List to hold stores
   late GoogleMapController controller;  // Google Maps controller to manage the map
-  BitmapDescriptor? pinLocationIcon;
-  late BitmapDescriptor initialPointIcon;
-  late BitmapDescriptor vehicleIcon;
+  BitmapDescriptor? pinLocationIcon; // Store pin icon
+  late BitmapDescriptor initialPointIcon; // Icon for the initial point
+  late BitmapDescriptor vehicleIcon; // Vehicle icon
 
-  // Variables for the info card
+  // Variables for displaying info card data
   String closestStoreName = "Loading...";
   double maxSpeed = 0.0;
   double totalDistance = 0.0;
@@ -48,12 +48,11 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    // Store pin icon is loaded first
-    _setCustomStorePin().then((_) => _loadPathAndStores());
-    // Initial ponit icon is loaded first
-    _setCustomInitialPin().then((_) => _loadPathAndStores());
-    // Vehicle  icon is loaded first
-    _vehiclePin().then((_) => _loadPathAndStores());
+
+    // Load custom icons first then load path and stores
+    _setCustomStorePin().then((_) => _loadPathAndStores()); // store pin icon
+    _setCustomInitialPin().then((_) => _loadPathAndStores()); // initial point icon
+    _vehiclePin().then((_) => _loadPathAndStores()); // vehicle icon
   }
 
   // Load custom store icon
@@ -80,9 +79,11 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
-  // Loading store locations
+  // Load store locations
   Future<List<Store>> loadStores() async {
-    final rawCsv = await rootBundle.loadString('assets/storesCopy.csv');
+    final rawCsv = await rootBundle.loadString('assets/storesCopy.csv'); // Load the CSV file as a raw string
+    
+    // Convert the CSV data into a table format
     List<List<dynamic>> csvTable = const CsvToListConverter(
       fieldDelimiter: ';', // Semicolon as delimiter
     ).convert(rawCsv);
@@ -103,9 +104,12 @@ class _MyAppState extends State<MyApp> {
 
   // Load path data and display store locations
   Future<void> _loadPathAndStores() async {
+
+     // Load store locations and path points from CSV
     final stores = await loadStores();
     final pathPoints = await loadPathPoints();
 
+    // Variables to track the closest store to the vehicle path
     double minDistance = double.infinity;
     Store? closestStore;
     DateTime? firstCloseTime;
@@ -124,14 +128,16 @@ class _MyAppState extends State<MyApp> {
         ),
       );
 
-      // Add markers at stores
+      // Clear previous markers
       _markers.clear();
+
+      // Add markers at stores
       for (final store in stores) {
         _markers[store.name] = Marker(
           markerId: MarkerId(store.name),
           position: LatLng(store.latitude, store.longitude),
-          infoWindow: InfoWindow(title: store.name),
-          icon: pinLocationIcon ?? BitmapDescriptor.defaultMarker,
+          infoWindow: InfoWindow(title: store.name), // Store name in marker info
+          icon: pinLocationIcon ?? BitmapDescriptor.defaultMarker,  // Use custom store icon
         );
       }
 
@@ -146,7 +152,7 @@ class _MyAppState extends State<MyApp> {
           );
           if (distance < minDistance) {
             minDistance = distance;
-            closestStore = store;
+            closestStore = store; // Update closest store
           }
         }
       }
@@ -175,9 +181,9 @@ class _MyAppState extends State<MyApp> {
         }
       }
 
-      // Load vehicle path markers
+      // Add markers along the vehicle path
       for (final point in pathPoints.whereIndexed(
-        (index, p) => index % 10 == 0,
+        (index, p) => index % 10 == 0, // one every 10 points
       )) {
         _markers['${point.latitude}-${point.longitude}'] = Marker(
           markerId: MarkerId('${point.latitude}-${point.longitude}'),
@@ -202,7 +208,7 @@ class _MyAppState extends State<MyApp> {
       );
     }
 
-    // Initial point marker (where the car starts)
+    // Initial point marker (where the vehicle starts)
     final firstPoint = pathPoints.first;
     _markers['initial_point'] = Marker(
       markerId: const MarkerId('initial_point'),
@@ -216,17 +222,13 @@ class _MyAppState extends State<MyApp> {
       ),
     );
 
-    // Offset in meters
-    double offsetMeters = 72.8;
-
-    // Convert to degrees (latitude)
-    double latOffset = offsetMeters / 111320;
-
-    // Convert to degrees (longitude), adjust based on latitude
-    double lngOffset =
-        offsetMeters / (111320 * cos(firstPoint.latitude * pi / 180));
-
     // Vehicle marker
+    // Calculating positon on a path
+    double offsetMeters = 72.8;
+    double latOffset = offsetMeters / 111320;
+    double lngOffset = offsetMeters / (111320 * cos(firstPoint.latitude * pi / 180));
+
+    // Place the vehicle marker at the new offset position
     _markers['vehicle'] = Marker(
       markerId: const MarkerId('vehicle'),
       position: LatLng(
@@ -237,7 +239,8 @@ class _MyAppState extends State<MyApp> {
     );
 
     // Update state for the info card
-    closestStoreName = closestStore?.name ?? "Unknown";
+    closestStoreName = closestStore?.name ?? "Unknown"; // closet store
+    // first close timestamp
     firstCloseTimestamp =
         firstCloseTime != null
             ? DateFormat('yyyy-MM-dd HH:mm').format(firstCloseTime!)
