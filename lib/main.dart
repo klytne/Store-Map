@@ -240,16 +240,10 @@ class _MyAppState extends State<MyApp> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        "🚗 Closest Store: ${closestStoreName}",
-                      ),
-                      Text(
-                        "⚡ Highest Speed: ${maxSpeed.toStringAsFixed(2)} km/h",
-                      ),
-                      Text(
-                        "📏 Distance Traveled: ${totalDistance.toStringAsFixed(2)} meters",
-                      ),
-                      Text("⏳ First Close Timestamp: ${firstCloseTimestamp}"),
+                      Text("🚗 Closest Store: $closestStoreName"),
+                      Text("⚡ Highest Speed: ${maxSpeed.toStringAsFixed(2)} km/h"),
+                      Text("📏 Distance Traveled: ${totalDistance.toStringAsFixed(2)} meters"),
+                      Text("⏳ First Close Timestamp: $firstCloseTimestamp"),
                     ],
                   ),
                 ),
