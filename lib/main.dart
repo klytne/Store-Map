@@ -31,6 +31,7 @@ class _MyAppState extends State<MyApp> {
   List<PathPoint> _pathPoints = [];
   GoogleMapController? _mapController;
   BitmapDescriptor? pinLocationIcon;
+  late BitmapDescriptor initialPointIcon;
 
   // Variables for the info card
   String closestStoreName = "Loading...";
@@ -41,16 +42,25 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _setCustomMapPin().then(
+    _setCustomStorePin().then(
       (_) => _loadPathAndStores(),
     ); // Icon is loaded first
+    _setCustomInitialPin().then((_) => _loadPathAndStores());
   }
 
   // Load custom store icon
-  Future<void> _setCustomMapPin() async {
+  Future<void> _setCustomStorePin() async {
     pinLocationIcon = await BitmapDescriptor.fromAssetImage(
       const ImageConfiguration(devicePixelRatio: 1.0),
       'assets/store.png',
+    );
+  }
+
+  // Load custom initial icon
+  Future<void> _setCustomInitialPin() async {
+    initialPointIcon = await BitmapDescriptor.fromAssetImage(
+      const ImageConfiguration(devicePixelRatio: 1.0),
+      'assets/initial_point.png',
     );
   }
 
@@ -169,8 +179,8 @@ class _MyAppState extends State<MyApp> {
           markerId: MarkerId('${point.latitude}-${point.longitude}'),
           position: LatLng(point.latitude, point.longitude),
           infoWindow: InfoWindow(
-            title: formatDateTime(point.dateTime),
-            snippet: 'Speed: ${point.speed} km/h, Heading: ${point.heading}°',
+            title: "🚗 ${formatDateTime(point.dateTime)}",
+            snippet: '⚡ Speed: ${point.speed} km/h, 🧭 Heading: ${point.heading}°',
           ),
         );
       }
@@ -187,12 +197,23 @@ class _MyAppState extends State<MyApp> {
       );
     }
 
+    // Initial point marker (where the car starts)
+    final firstPoint = pathPoints.first;
+    _markers['initial_point'] = Marker(
+      markerId: const MarkerId('initial_point'),
+      position: LatLng(firstPoint.latitude, firstPoint.longitude),
+      icon: initialPointIcon, // Custom image marker
+      infoWindow: InfoWindow(
+        title: "🚗 Start Point: ${DateFormat('yyyy-MM-dd HH:mm').format(firstPoint.dateTime)}",
+        snippet: "⚡ Speed: ${firstPoint.speed} km/h / 🧭 Heading: ${firstPoint.heading}°",
+      ),
+    );
+
     // Set initial camera position
     final initialPosition = await _calculateInitialPosition(stores);
     _mapController?.animateCamera(
       CameraUpdate.newCameraPosition(initialPosition),
     );
-    
 
     // Update state for the info card
     closestStoreName = closestStore?.name ?? "Unknown";
@@ -241,8 +262,12 @@ class _MyAppState extends State<MyApp> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text("🚗 Closest Store: $closestStoreName"),
-                      Text("⚡ Highest Speed: ${maxSpeed.toStringAsFixed(2)} km/h"),
-                      Text("📏 Distance Traveled: ${totalDistance.toStringAsFixed(2)} meters"),
+                      Text(
+                        "⚡ Highest Speed: ${maxSpeed.toStringAsFixed(2)} km/h",
+                      ),
+                      Text(
+                        "📏 Distance Traveled: ${totalDistance.toStringAsFixed(2)} meters",
+                      ),
                       Text("⏳ First Close Timestamp: $firstCloseTimestamp"),
                     ],
                   ),
