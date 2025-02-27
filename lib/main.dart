@@ -46,6 +46,7 @@ class _MyAppState extends State<MyApp> {
     ); // Icon is loaded first
   }
 
+
   // Load custom store icon
   Future<void> _setCustomMapPin() async {
     pinLocationIcon = await BitmapDescriptor.fromAssetImage(
@@ -170,7 +171,7 @@ class _MyAppState extends State<MyApp> {
           position: LatLng(point.latitude, point.longitude),
           infoWindow: InfoWindow(
             title: formatDateTime(point.dateTime),
-            snippet: 'Speed: ${point.speed} km/h, Heading: ${point.heading}°',
+            snippet: 'Speeds: ${point.speed} km/h, Heading: ${point.heading}°',
           ),
         );
       }
