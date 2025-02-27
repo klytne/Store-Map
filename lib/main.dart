@@ -9,11 +9,13 @@ import 'src/load_path_points.dart';
 import 'package:intl/intl.dart';
 import 'package:collection/collection.dart';
 import 'package:geolocator/geolocator.dart';
+import 'dart:math';
 
 void main() {
   runApp(const MyApp());
 }
 
+// Function to format a DateTime object into a readable string format
 String formatDateTime(DateTime dt) {
   return DateFormat('yyyy-MM-dd – kk:mm').format(dt);
 }
@@ -26,13 +28,18 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  final Map<String, Marker> _markers = {};
-  final Set<Polyline> _polylines = {};
-  List<PathPoint> _pathPoints = [];
-  GoogleMapController? _mapController;
-  BitmapDescriptor? pinLocationIcon;
 
-  // Variables for the info card
+  //Declare variables
+  final Map<String, Marker> _markers = {}; // Map to store markers
+  final Set<Polyline> _polylines = {}; // Set to hold polylines
+  List<PathPoint> _pathPoints = []; // List of path points for the vehicle's movement
+  List<Store> stores = []; // List to hold stores
+  late GoogleMapController controller;  // Google Maps controller to manage the map
+  BitmapDescriptor? pinLocationIcon; // Store pin icon
+  late BitmapDescriptor initialPointIcon; // Icon for the initial point
+  late BitmapDescriptor vehicleIcon; // Vehicle icon
+
+  // Variables for displaying info card data
   String closestStoreName = "Loading...";
   double maxSpeed = 0.0;
   double totalDistance = 0.0;
@@ -41,22 +48,42 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _setCustomMapPin().then(
-      (_) => _loadPathAndStores(),
-    ); // Icon is loaded first
+
+    // Load custom icons first then load path and stores
+    _setCustomStorePin().then((_) => _loadPathAndStores()); // store pin icon
+    _setCustomInitialPin().then((_) => _loadPathAndStores()); // initial point icon
+    _vehiclePin().then((_) => _loadPathAndStores()); // vehicle icon
   }
 
   // Load custom store icon
-  Future<void> _setCustomMapPin() async {
+  Future<void> _setCustomStorePin() async {
     pinLocationIcon = await BitmapDescriptor.fromAssetImage(
       const ImageConfiguration(devicePixelRatio: 1.0),
       'assets/store.png',
     );
   }
 
-  // Loading store locations
+  // Load custom initial icon
+  Future<void> _setCustomInitialPin() async {
+    initialPointIcon = await BitmapDescriptor.fromAssetImage(
+      const ImageConfiguration(devicePixelRatio: 1.0),
+      'assets/initial_point.png',
+    );
+  }
+
+  // Load vehicle icon
+  Future<void> _vehiclePin() async {
+    vehicleIcon = await BitmapDescriptor.fromAssetImage(
+      const ImageConfiguration(devicePixelRatio: 1.0),
+      'assets/car.png',
+    );
+  }
+
+  // Load store locations
   Future<List<Store>> loadStores() async {
-    final rawCsv = await rootBundle.loadString('assets/storesCopy.csv');
+    final rawCsv = await rootBundle.loadString('assets/storesCopy.csv'); // Load the CSV file as a raw string
+    
+    // Convert the CSV data into a table format
     List<List<dynamic>> csvTable = const CsvToListConverter(
       fieldDelimiter: ';', // Semicolon as delimiter
     ).convert(rawCsv);
@@ -75,29 +102,14 @@ class _MyAppState extends State<MyApp> {
     return stores;
   }
 
-  // Calculates the average latitude and longitude of the stores
-  // and then sets initial camera position
-  Future<CameraPosition> _calculateInitialPosition(List<Store> stores) async {
-    double totalLat = 0, totalLng = 0;
-    for (var store in stores) {
-      totalLat += store.latitude;
-      totalLng += store.longitude;
-    }
-    final count = stores.length;
-    final centerLat = totalLat / count;
-    final centerLng = totalLng / count;
-
-    return CameraPosition(
-      target: LatLng(centerLat, centerLng),
-      zoom: 10, // Adjust zoom level as need
-    );
-  }
-
   // Load path data and display store locations
   Future<void> _loadPathAndStores() async {
+
+     // Load store locations and path points from CSV
     final stores = await loadStores();
     final pathPoints = await loadPathPoints();
 
+    // Variables to track the closest store to the vehicle path
     double minDistance = double.infinity;
     Store? closestStore;
     DateTime? firstCloseTime;
@@ -116,14 +128,16 @@ class _MyAppState extends State<MyApp> {
         ),
       );
 
-      // Add markers at stores
+      // Clear previous markers
       _markers.clear();
+
+      // Add markers at stores
       for (final store in stores) {
         _markers[store.name] = Marker(
           markerId: MarkerId(store.name),
           position: LatLng(store.latitude, store.longitude),
-          infoWindow: InfoWindow(title: store.name),
-          icon: pinLocationIcon ?? BitmapDescriptor.defaultMarker,
+          infoWindow: InfoWindow(title: store.name), // Store name in marker info
+          icon: pinLocationIcon ?? BitmapDescriptor.defaultMarker,  // Use custom store icon
         );
       }
 
@@ -138,7 +152,7 @@ class _MyAppState extends State<MyApp> {
           );
           if (distance < minDistance) {
             minDistance = distance;
-            closestStore = store;
+            closestStore = store; // Update closest store
           }
         }
       }
@@ -146,8 +160,11 @@ class _MyAppState extends State<MyApp> {
       // Find highest speed recorded
       maxSpeed = pathPoints.map((p) => p.speed).reduce((a, b) => a > b ? a : b);
 
-      // 🔍 Find when the vehicle first came close to the closest store
+      // Find timestamp when vehicle is close to a store
       if (closestStore != null) {
+        double minDistance = double.infinity;
+        firstCloseTime = null;
+
         for (final point in pathPoints) {
           double distance = Geolocator.distanceBetween(
             closestStore!.latitude,
@@ -156,21 +173,25 @@ class _MyAppState extends State<MyApp> {
             point.longitude,
           );
 
-          // Timestamp when vechicle the vehicle first came close to the closest store
-          firstCloseTime ??= point.dateTime;
+          // If this is the smallest distance so far, update firstCloseTime
+          if (distance < minDistance) {
+            minDistance = distance;
+            firstCloseTime = point.dateTime;
+          }
         }
       }
 
-      // Load vehicle path markers
+      // Add markers along the vehicle path
       for (final point in pathPoints.whereIndexed(
-        (index, p) => index % 10 == 0,
+        (index, p) => index % 10 == 0, // one every 10 points
       )) {
         _markers['${point.latitude}-${point.longitude}'] = Marker(
           markerId: MarkerId('${point.latitude}-${point.longitude}'),
           position: LatLng(point.latitude, point.longitude),
           infoWindow: InfoWindow(
-            title: formatDateTime(point.dateTime),
-            snippet: 'Speed: ${point.speed} km/h, Heading: ${point.heading}°',
+            title: "🚗 ${formatDateTime(point.dateTime)}",
+            snippet:
+                '⚡ Speed: ${point.speed} km/h, 🧭 Heading: ${point.heading}°',
           ),
         );
       }
@@ -187,15 +208,39 @@ class _MyAppState extends State<MyApp> {
       );
     }
 
-    // Set initial camera position
-    final initialPosition = await _calculateInitialPosition(stores);
-    _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(initialPosition),
+    // Initial point marker (where the vehicle starts)
+    final firstPoint = pathPoints.first;
+    _markers['initial_point'] = Marker(
+      markerId: const MarkerId('initial_point'),
+      position: LatLng(firstPoint.latitude, firstPoint.longitude),
+      icon: initialPointIcon, // Custom image marker
+      infoWindow: InfoWindow(
+        title:
+            "🚗 Start Point: ${DateFormat('yyyy-MM-dd HH:mm').format(firstPoint.dateTime)}",
+        snippet:
+            "⚡ Speed: ${firstPoint.speed} km/h / 🧭 Heading: ${firstPoint.heading}°",
+      ),
     );
-    
+
+    // Vehicle marker
+    // Calculating positon on a path
+    double offsetMeters = 72.8;
+    double latOffset = offsetMeters / 111320;
+    double lngOffset = offsetMeters / (111320 * cos(firstPoint.latitude * pi / 180));
+
+    // Place the vehicle marker at the new offset position
+    _markers['vehicle'] = Marker(
+      markerId: const MarkerId('vehicle'),
+      position: LatLng(
+        firstPoint.latitude + latOffset, // move north
+        firstPoint.longitude + lngOffset,
+      ),
+      icon: vehicleIcon,
+    );
 
     // Update state for the info card
-    closestStoreName = closestStore?.name ?? "Unknown";
+    closestStoreName = closestStore?.name ?? "Unknown"; // closet store
+    // first close timestamp
     firstCloseTimestamp =
         firstCloseTime != null
             ? DateFormat('yyyy-MM-dd HH:mm').format(firstCloseTime!)
@@ -211,9 +256,6 @@ class _MyAppState extends State<MyApp> {
         body: Stack(
           children: [
             GoogleMap(
-              onMapCreated: (controller) {
-                _mapController = controller;
-              },
               initialCameraPosition: const CameraPosition(
                 target: LatLng(0, 0),
                 zoom: 2,
@@ -240,16 +282,14 @@ class _MyAppState extends State<MyApp> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        "🚗 Closest Store: ${closestStoreName}",
-                      ),
+                      Text("🚗 Closest Store: $closestStoreName"),
                       Text(
                         "⚡ Highest Speed: ${maxSpeed.toStringAsFixed(2)} km/h",
                       ),
                       Text(
                         "📏 Distance Traveled: ${totalDistance.toStringAsFixed(2)} meters",
                       ),
-                      Text("⏳ First Close Timestamp: ${firstCloseTimestamp}"),
+                      Text("⏳ First Close Timestamp: $firstCloseTimestamp"),
                     ],
                   ),
                 ),

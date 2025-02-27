@@ -78,6 +78,8 @@ flutter:
     - assets/PathTravelled.json
     - assets/storesCopy.csv
     - assets/store.png
+    - assets/initial_point.png
+    - assets/car.png
 
 
   # An image asset can refer to one or more resolution-specific "variants", see
