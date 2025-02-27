@@ -9,11 +9,13 @@ import 'src/load_path_points.dart';
 import 'package:intl/intl.dart';
 import 'package:collection/collection.dart';
 import 'package:geolocator/geolocator.dart';
+import 'dart:math';
 
 void main() {
   runApp(const MyApp());
 }
 
+// Function to format a DateTime object into a readable string format
 String formatDateTime(DateTime dt) {
   return DateFormat('yyyy-MM-dd – kk:mm').format(dt);
 }
@@ -26,12 +28,16 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  final Map<String, Marker> _markers = {};
-  final Set<Polyline> _polylines = {};
-  List<PathPoint> _pathPoints = [];
-  GoogleMapController? _mapController;
+
+  //Declare variables
+  final Map<String, Marker> _markers = {}; // Map to store markers
+  final Set<Polyline> _polylines = {}; // Set to hold polylines
+  List<PathPoint> _pathPoints = []; // List of path points for the vehicle's movement
+  List<Store> stores = []; // List to hold stores
+  late GoogleMapController controller;  // Google Maps controller to manage the map
   BitmapDescriptor? pinLocationIcon;
   late BitmapDescriptor initialPointIcon;
+  late BitmapDescriptor vehicleIcon;
 
   // Variables for the info card
   String closestStoreName = "Loading...";
@@ -42,10 +48,12 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _setCustomStorePin().then(
-      (_) => _loadPathAndStores(),
-    ); // Icon is loaded first
+    // Store pin icon is loaded first
+    _setCustomStorePin().then((_) => _loadPathAndStores());
+    // Initial ponit icon is loaded first
     _setCustomInitialPin().then((_) => _loadPathAndStores());
+    // Vehicle  icon is loaded first
+    _vehiclePin().then((_) => _loadPathAndStores());
   }
 
   // Load custom store icon
@@ -61,6 +69,14 @@ class _MyAppState extends State<MyApp> {
     initialPointIcon = await BitmapDescriptor.fromAssetImage(
       const ImageConfiguration(devicePixelRatio: 1.0),
       'assets/initial_point.png',
+    );
+  }
+
+  // Load vehicle icon
+  Future<void> _vehiclePin() async {
+    vehicleIcon = await BitmapDescriptor.fromAssetImage(
+      const ImageConfiguration(devicePixelRatio: 1.0),
+      'assets/car.png',
     );
   }
 
@@ -83,24 +99,6 @@ class _MyAppState extends State<MyApp> {
         }).toList();
 
     return stores;
-  }
-
-  // Calculates the average latitude and longitude of the stores
-  // and then sets initial camera position
-  Future<CameraPosition> _calculateInitialPosition(List<Store> stores) async {
-    double totalLat = 0, totalLng = 0;
-    for (var store in stores) {
-      totalLat += store.latitude;
-      totalLng += store.longitude;
-    }
-    final count = stores.length;
-    final centerLat = totalLat / count;
-    final centerLng = totalLng / count;
-
-    return CameraPosition(
-      target: LatLng(centerLat, centerLng),
-      zoom: 10, // Adjust zoom level as need
-    );
   }
 
   // Load path data and display store locations
@@ -156,8 +154,11 @@ class _MyAppState extends State<MyApp> {
       // Find highest speed recorded
       maxSpeed = pathPoints.map((p) => p.speed).reduce((a, b) => a > b ? a : b);
 
-      // 🔍 Find when the vehicle first came close to the closest store
+      // Find timestamp when vehicle is close to a store
       if (closestStore != null) {
+        double minDistance = double.infinity;
+        firstCloseTime = null;
+
         for (final point in pathPoints) {
           double distance = Geolocator.distanceBetween(
             closestStore!.latitude,
@@ -166,8 +167,11 @@ class _MyAppState extends State<MyApp> {
             point.longitude,
           );
 
-          // Timestamp when vechicle the vehicle first came close to the closest store
-          firstCloseTime ??= point.dateTime;
+          // If this is the smallest distance so far, update firstCloseTime
+          if (distance < minDistance) {
+            minDistance = distance;
+            firstCloseTime = point.dateTime;
+          }
         }
       }
 
@@ -180,7 +184,8 @@ class _MyAppState extends State<MyApp> {
           position: LatLng(point.latitude, point.longitude),
           infoWindow: InfoWindow(
             title: "🚗 ${formatDateTime(point.dateTime)}",
-            snippet: '⚡ Speed: ${point.speed} km/h, 🧭 Heading: ${point.heading}°',
+            snippet:
+                '⚡ Speed: ${point.speed} km/h, 🧭 Heading: ${point.heading}°',
           ),
         );
       }
@@ -204,15 +209,31 @@ class _MyAppState extends State<MyApp> {
       position: LatLng(firstPoint.latitude, firstPoint.longitude),
       icon: initialPointIcon, // Custom image marker
       infoWindow: InfoWindow(
-        title: "🚗 Start Point: ${DateFormat('yyyy-MM-dd HH:mm').format(firstPoint.dateTime)}",
-        snippet: "⚡ Speed: ${firstPoint.speed} km/h / 🧭 Heading: ${firstPoint.heading}°",
+        title:
+            "🚗 Start Point: ${DateFormat('yyyy-MM-dd HH:mm').format(firstPoint.dateTime)}",
+        snippet:
+            "⚡ Speed: ${firstPoint.speed} km/h / 🧭 Heading: ${firstPoint.heading}°",
       ),
     );
 
-    // Set initial camera position
-    final initialPosition = await _calculateInitialPosition(stores);
-    _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(initialPosition),
+    // Offset in meters
+    double offsetMeters = 72.8;
+
+    // Convert to degrees (latitude)
+    double latOffset = offsetMeters / 111320;
+
+    // Convert to degrees (longitude), adjust based on latitude
+    double lngOffset =
+        offsetMeters / (111320 * cos(firstPoint.latitude * pi / 180));
+
+    // Vehicle marker
+    _markers['vehicle'] = Marker(
+      markerId: const MarkerId('vehicle'),
+      position: LatLng(
+        firstPoint.latitude + latOffset, // move north
+        firstPoint.longitude + lngOffset,
+      ),
+      icon: vehicleIcon,
     );
 
     // Update state for the info card
@@ -232,9 +253,6 @@ class _MyAppState extends State<MyApp> {
         body: Stack(
           children: [
             GoogleMap(
-              onMapCreated: (controller) {
-                _mapController = controller;
-              },
               initialCameraPosition: const CameraPosition(
                 target: LatLng(0, 0),
                 zoom: 2,
