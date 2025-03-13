@@ -26,7 +26,7 @@ This project is a real-time vehicle path visualization tool built with Flutter, 
   <li>Run the app on an emulator or physical device: Make sure you have a valid Google Maps API key or Mapbox access token configured in android/app/src/main/AndroidManifest.xml (for Google Maps) or your app’s settings (for Mapbox).</li>
 </ol>
 </br>
-**Want to contribute? Fork the repo, make your changes, and submit a pull request!**
+<b>Want to contribute? Fork the repo, make your changes, and submit a pull request!</b>
 
 ## Contact
 For any questions, feel free to reach out:</br>
